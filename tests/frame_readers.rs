@@ -38,6 +38,7 @@ mod tests {
                 acquisition_type: AcquisitionType::DDAPASEF,
                 intensity_correction_factor: 1.0 / 100.0,
                 window_group: 0,
+                maldi_info: None,
             },
             // Frame::default(),
             Frame {
@@ -51,6 +52,7 @@ mod tests {
                 acquisition_type: AcquisitionType::DDAPASEF,
                 intensity_correction_factor: 1.0 / 100.0,
                 window_group: 0,
+                maldi_info: None,
             },
             // Frame::default(),
         ];
@@ -86,6 +88,7 @@ mod tests {
                 acquisition_type: AcquisitionType::DDAPASEF,
                 intensity_correction_factor: 1.0 / 100.0,
                 window_group: 0,
+                maldi_info: None,
             },
             // Frame::default(),
             Frame {
@@ -99,6 +102,7 @@ mod tests {
                 acquisition_type: AcquisitionType::DDAPASEF,
                 intensity_correction_factor: 1.0 / 100.0,
                 window_group: 0,
+                maldi_info: None,
             },
         ];
         for i in 0..expected.len() {

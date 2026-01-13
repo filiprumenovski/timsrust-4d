@@ -11,7 +11,8 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```ignore
+//! // Internal API: SqlReader is not part of the public surface.
 //! use timsrust::io::readers::file_readers::sql_reader::SqlReader;
 //!
 //! let reader = SqlReader::open("analysis.tdf")?;

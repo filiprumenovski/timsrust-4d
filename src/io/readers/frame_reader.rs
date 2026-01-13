@@ -16,7 +16,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use timsrust::io::readers::FrameReader;
+//! use timsrust::readers::FrameReader;
 //!
 //! let reader = FrameReader::new("data.d")?;
 //! println!("Total frames: {}", reader.len());
@@ -376,6 +376,84 @@ fn get_frame_without_data(
         });
     }
     frame
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn attaches_maldi_metadata_when_present() {
+        let sql_frames = vec![SqlFrame {
+            id: 1,
+            msms_type: 0,
+            rt: 1.5,
+            accumulation_time: 100.0,
+            ..Default::default()
+        }];
+
+        let mut maldi_map = HashMap::new();
+        maldi_map.insert(
+            1,
+            SqlMaldiFrameInfo {
+                frame: 1,
+                spot_name: "spot-A".to_string(),
+                x_index_pos: 10,
+                y_index_pos: 20,
+                x_position: Some(12.5),
+                y_position: Some(25.0),
+                laser_power: Some(0.9),
+                laser_rep_rate: Some(200.0),
+                laser_shots: Some(50),
+            },
+        );
+
+        let frame = get_frame_without_data(
+            0,
+            &sql_frames,
+            AcquisitionType::DDAPASEF,
+            &vec![0],
+            &vec![Arc::new(QuadrupoleSettings::default())],
+            &maldi_map,
+        );
+
+        let maldi = frame.maldi_info.expect("expected MALDI metadata");
+        assert_eq!(maldi.spot_name, "spot-A");
+        assert_eq!(maldi.pixel_x, 10);
+        assert_eq!(maldi.pixel_y, 20);
+        assert_eq!(maldi.position_x_um, Some(12.5));
+        assert_eq!(maldi.position_y_um, Some(25.0));
+        assert_eq!(maldi.laser_power, Some(0.9));
+        assert_eq!(maldi.laser_rep_rate, Some(200.0));
+        assert_eq!(maldi.laser_shots, Some(50));
+        assert_eq!(frame.index, 1);
+        assert_eq!(frame.ms_level, MSLevel::MS1);
+    }
+
+    #[test]
+    fn leaves_maldi_none_when_absent() {
+        let sql_frames = vec![SqlFrame {
+            id: 2,
+            msms_type: 8,
+            rt: 2.0,
+            accumulation_time: 50.0,
+            ..Default::default()
+        }];
+
+        let frame = get_frame_without_data(
+            0,
+            &sql_frames,
+            AcquisitionType::DDAPASEF,
+            &vec![0],
+            &vec![Arc::new(QuadrupoleSettings::default())],
+            &HashMap::new(),
+        );
+
+        assert!(frame.maldi_info.is_none());
+        assert_eq!(frame.index, 2);
+        assert_eq!(frame.ms_level, MSLevel::MS2);
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
