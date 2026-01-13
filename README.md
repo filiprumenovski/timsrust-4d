@@ -4,7 +4,14 @@
 
 # TimsRust
 
-A crate to read Bruker TimsTof data.
+A crate to read Bruker TimsTOF data with full support for ion mobility (TIMS) and MALDI imaging (MALDI-TIMS-MSI).
+
+## Features
+
+- **LC-TIMS-MS**: Liquid chromatography with ion mobility separation
+- **PASEF/diaPASEF**: Parallel acquisition schemes (DDA and DIA)
+- **MALDI-TIMS-MSI**: 4D imaging mass spectrometry with spatial coordinates
+- **Full metadata support**: Automatically loads and exposes spatial coordinates, laser parameters, and acquisition metadata
 
 ## Stability
 
@@ -26,8 +33,34 @@ TimsRust is intended to be used as a library and not as a stand-alone applicatio
 ### Basics
 
 Two primary data types are exposed through TimsRust:
-* Spectra: A traditional representation that expresses intensitites in function of mz values for a given precursor.
-* Frames: All recorded data from a single TIMS elution (i.e. at one specific retention_time).
+* **Spectra**: A traditional representation that expresses intensitites in function of mz values for a given precursor.
+* **Frames**: All recorded data from a single TIMS elution (i.e. at one specific retention_time).
+
+### MALDI Imaging Support
+
+For MALDI imaging data, frames automatically include spatial metadata:
+
+```rust
+use timsrust::io::readers::FrameReader;
+
+let reader = FrameReader::new("data.d")?;
+
+// Check if this is imaging data
+if reader.is_maldi() {
+    let frame = reader.get(0)?;
+    if let Some(maldi) = &frame.maldi_info {
+        println!("Pixel location: ({}, {})", maldi.pixel_x, maldi.pixel_y);
+        println!("Physical position: ({:.2} µm, {:.2} µm)",
+                 maldi.position_x_um.unwrap_or(0.0),
+                 maldi.position_y_um.unwrap_or(0.0));
+        if let Some(power) = maldi.laser_power {
+            println!("Laser power: {:.1}%", power);
+        }
+    }
+}
+```
+
+### Basics
 
 ### File formats
 

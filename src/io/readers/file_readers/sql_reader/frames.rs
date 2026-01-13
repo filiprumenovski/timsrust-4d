@@ -1,5 +1,11 @@
+//! Frame table metadata from Bruker TDF files.
+//!
+//! Reads frame-level metadata including retention time, MS level, scan counts,
+//! and peak information from the `Frames` table in Bruker TimsTOF data files.
+
 use super::{ParseDefault, ReadableSqlTable};
 
+/// Raw frame metadata from the Frames SQLite table.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SqlFrame {
     pub id: usize,

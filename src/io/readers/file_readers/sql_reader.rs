@@ -1,5 +1,6 @@
 pub mod frame_groups;
 pub mod frames;
+pub mod maldi;
 pub mod metadata;
 pub mod pasef_frame_msms;
 pub mod precursors;

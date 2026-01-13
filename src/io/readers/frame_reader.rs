@@ -1,16 +1,51 @@
+//! Frame data reading from Bruker TDF files.
+//!
+//! This module reads binary peak data (m/z, intensity, TOF indices) from the
+//! `analysis.tdf_bin` file and combines it with frame metadata from the
+//! `analysis.tdf` SQLite database. It also automatically detects and loads
+//! MALDI imaging metadata when present.
+//!
+//! # Features
+//!
+//! - Decompression of Bruker's proprietary TDF binary format
+//! - MALDI-TIMS-MSI support with pixel coordinates
+//! - Parallel frame reading for performance
+//! - DIA window metadata for data-independent acquisition
+//! - Full ion mobility (TIMS) data reconstruction
+//!
+//! # Example
+//!
+//! ```no_run
+//! use timsrust::io::readers::FrameReader;
+//!
+//! let reader = FrameReader::new("data.d")?;
+//! println!("Total frames: {}", reader.len());
+//! println!("Is MALDI imaging: {}", reader.is_maldi());
+//!
+//! // Get first frame with all data
+//! let frame = reader.get(0)?;
+//! println!("Peak count: {}", frame.intensities.len());
+//!
+//! // Check for MALDI metadata
+//! if let Some(maldi) = &frame.maldi_info {
+//!     println!("Pixel location: ({}, {})", maldi.pixel_x, maldi.pixel_y);
+//! }
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+
 use std::sync::Arc;
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 #[cfg(feature = "timscompress")]
 use timscompress::reader::CompressedTdfBlobReader;
 
-use crate::ms_data::{AcquisitionType, Frame, MSLevel, QuadrupoleSettings};
+use crate::ms_data::{AcquisitionType, Frame, MaldiInfo, MSLevel, QuadrupoleSettings};
 
 use super::{
     file_readers::{
         sql_reader::{
-            frame_groups::SqlWindowGroup, frames::SqlFrame, ReadableSqlTable,
-            SqlReader, SqlReaderError,
+            frame_groups::SqlWindowGroup, frames::SqlFrame, maldi::SqlMaldiFrameInfo,
+            ReadableSqlTable, SqlReader, SqlReaderError,
         },
         tdf_blob_reader::{TdfBlob, TdfBlobReader, TdfBlobReaderError},
     },
@@ -30,6 +65,8 @@ pub struct FrameReader {
     compression_type: u8,
     #[cfg(feature = "timscompress")]
     scan_count: usize,
+    /// Whether this is MALDI imaging data
+    is_maldi: bool,
 }
 
 impl FrameReader {
@@ -48,6 +85,15 @@ impl FrameReader {
 
         let tdf_sql_reader = SqlReader::open(&path)?;
         let sql_frames = SqlFrame::from_sql_reader(&tdf_sql_reader)?;
+        
+        // Load MALDI info if present (for imaging MS data)
+        let maldi_info = tdf_sql_reader.read_maldi_frame_info()?;
+        let is_maldi = !maldi_info.is_empty();
+        let maldi_map: std::collections::HashMap<usize, SqlMaldiFrameInfo> = maldi_info
+            .into_iter()
+            .map(|m| (m.frame, m))
+            .collect();
+        
         let tdf_bin_reader = TdfBlobReader::new(&path)?;
         #[cfg(feature = "timscompress")]
         let compressed_reader = CompressedTdfBlobReader::new(&path)
@@ -87,6 +133,7 @@ impl FrameReader {
                     acquisition,
                     &window_groups,
                     &quadrupole_settings,
+                    &maldi_map,
                 )
             })
             .collect();
@@ -112,6 +159,7 @@ impl FrameReader {
             compressed_reader,
             #[cfg(feature = "timscompress")]
             scan_count,
+            is_maldi,
         };
         Ok(reader)
     }
@@ -229,6 +277,11 @@ impl FrameReader {
     pub fn len(&self) -> usize {
         self.frames.len()
     }
+
+    /// Returns true if this TDF file contains MALDI imaging data
+    pub fn is_maldi(&self) -> bool {
+        self.is_maldi
+    }
 }
 
 fn read_scan_offsets(
@@ -291,6 +344,7 @@ fn get_frame_without_data(
     acquisition: AcquisitionType,
     window_groups: &Vec<u8>,
     quadrupole_settings: &Vec<Arc<QuadrupoleSettings>>,
+    maldi_map: &std::collections::HashMap<usize, SqlMaldiFrameInfo>,
 ) -> Frame {
     let mut frame: Frame = Frame::default();
     let sql_frame = &sql_frames[index];
@@ -307,6 +361,19 @@ fn get_frame_without_data(
         frame.window_group = window_group;
         frame.quadrupole_settings =
             quadrupole_settings[window_group as usize - 1].clone();
+    }
+    // Attach MALDI info if present (frame IDs are 1-based)
+    if let Some(maldi) = maldi_map.get(&sql_frame.id) {
+        frame.maldi_info = Some(MaldiInfo {
+            spot_name: maldi.spot_name.clone(),
+            pixel_x: maldi.x_index_pos,
+            pixel_y: maldi.y_index_pos,
+            position_x_um: maldi.x_position,
+            position_y_um: maldi.y_position,
+            laser_power: maldi.laser_power,
+            laser_rep_rate: maldi.laser_rep_rate,
+            laser_shots: maldi.laser_shots,
+        });
     }
     frame
 }
